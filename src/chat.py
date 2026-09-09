@@ -4,7 +4,12 @@ import sys
 
 from src.agent.model_factory import build_agent
 from src.agent.prompts import SYSTEM_PROMPT
-from src.agent.tools import scan_documents, draft_action_message, get_today
+from src.agent.tools import (
+    scan_documents,
+    draft_action_message,
+    find_cheaper_alternatives,
+    get_today,
+)
 
 
 def main() -> int:
@@ -13,7 +18,8 @@ def main() -> int:
     try:
         agent = build_agent(
             SYSTEM_PROMPT,
-            tools=[scan_documents, draft_action_message, get_today],
+            tools=[scan_documents, draft_action_message,
+                   find_cheaper_alternatives, get_today],
         )
     except Exception as e:
         print(f"Could not start agent: {e}", file=sys.stderr)

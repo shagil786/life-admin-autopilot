@@ -7,6 +7,11 @@ from src.main import Pipeline
 from src.output.message_drafter import MessageDrafter
 from src.task_engine.rules import RuleEngine
 from src.task_engine.scheduler import TaskScheduler
+from src.task_engine.alternative_finder import (
+    AlternativeFinder,
+    build_llm_search_fn,
+    format_alternatives,
+)
 
 # Module-level state so tools share one pipeline instance.
 _pipeline: Pipeline = None
@@ -50,7 +55,14 @@ def scan_documents(path: str = "data/samples") -> str:
         return f"Error: path not found: {path}"
 
     result = pipeline.run(files)
-    return result["formatted"] + f"\n\n{result['summary']}"
+    # Append machine-readable details so the agent can act on specifics
+    # (product names, vendors, amounts) without re-asking the user.
+    detail_lines = ["\n--- task details ---"]
+    for i, task in enumerate(result["tasks"], 1):
+        d = task.get("details", {})
+        keep = {k: v for k, v in d.items() if k != "source"}
+        detail_lines.append(f"{i}. {keep}")
+    return result["formatted"] + f"\n\n{result['summary']}" + "\n".join(detail_lines)
 
 
 @tool(
@@ -74,6 +86,29 @@ def draft_action_message(
             {"vendor": name, "amount": amount, "date": date_str or None}
         )
     return f"Unknown action '{action}'. Use cancel_or_review or return_or_exchange."
+
+
+@tool(
+    description=(
+        "Find cheaper alternatives to a product the user bought or is about "
+        "to buy. Provide the product name and its price as the budget. "
+        "Returns sorted alternatives with reasons. Requires the LLM "
+        "gateway to be configured; says so otherwise."
+    )
+)
+def find_cheaper_alternatives(product: str, current_price: float) -> str:
+    """Search for cheaper alternatives to a product."""
+    search_fn = build_llm_search_fn()
+    if search_fn is None:
+        return (
+            "No search gateway configured — set LIFE_ADMIN_BASE_URL and "
+            "LIFE_ADMIN_API_KEY to enable cheaper-alternative search."
+        )
+    finder = AlternativeFinder(search_fn=search_fn)
+    alts = finder.find(product, max_price=current_price)
+    if not alts:
+        return f"No cheaper alternatives found for {product} within ${current_price:.2f}."
+    return format_alternatives(product, alts)
 
 
 @tool(

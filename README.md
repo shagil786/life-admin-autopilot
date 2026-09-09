@@ -99,6 +99,6 @@ src/
 - [x] Extraction: receipts, subscriptions, warranties
 - [x] Rule engine + prioritized task list
 - [x] Strands Agent chat with tool calls
-- [ ] Email (.eml) ingestion
-- [ ] Cheaper-alternative finder (Exa search)
+- [x] Email (.eml) ingestion
+- [x] Cheaper-alternative finder (LLM-backed, pluggable search)
 - [ ] LLM-powered extraction for messy scans
