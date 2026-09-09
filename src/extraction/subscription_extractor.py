@@ -4,7 +4,7 @@ from typing import Optional
 from src.extraction.base import BaseExtractor
 from src.ingestion.base import Document
 
-NAME_PATTERN = r"([A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*)?)\s+subscription"
+NAME_PATTERN = r"([A-Z][\w&.'-]*(?:\s+[A-Z][\w&.'-]*)*)\s+(?:subscription|membership|plan|service)"
 AMOUNT_PATTERN = r"\$\s*([\d,]+\.?\d*)\s*(?:/|per\s|monthly|yearly|annually)?"
 MONTHLY_PATTERN = r"\$\s*([\d,]+\.?\d*)\s*(?:/month|/monthly|monthly)"
 YEARLY_PATTERN = r"\$\s*([\d,]+\.?\d*)\s*(?:/year|/yearly|yearly|/annually)"

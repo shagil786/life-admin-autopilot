@@ -60,10 +60,11 @@ class RuleEngine:
             return []
         priority = self._priority_for_days_left(days_left, URGENT_SUBSCRIPTION_DAYS)
         name = sub.get("name") or "subscription"
+        cycle = (sub.get("billing_cycle") or "period").replace("monthly", "month").replace("yearly", "year")
         return [{
             "action": "cancel_or_review",
             "title": f"{name} renews on {sub['next_billing_date']} "
-                     f"(${sub.get('amount', '?')}/{sub.get('billing_cycle', '?')}) "
+                     f"(${sub.get('amount', '?')}/{cycle}) "
                      f"— cancel if unused",
             "priority": priority,
             "due_date": sub["next_billing_date"],
