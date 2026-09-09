@@ -5,6 +5,7 @@ from strands import tool
 
 from src.main import Pipeline
 from src.output.message_drafter import MessageDrafter
+from src.extraction.gateway_llm import build_gateway_llm
 from src.task_engine.rules import RuleEngine
 from src.task_engine.scheduler import TaskScheduler
 from src.task_engine.alternative_finder import (
@@ -25,6 +26,7 @@ def _get_pipeline() -> Pipeline:
         _pipeline = Pipeline(
             rules=RuleEngine(today=today),
             scheduler=TaskScheduler(today=today),
+            llm=build_gateway_llm(),
         )
     return _pipeline
 

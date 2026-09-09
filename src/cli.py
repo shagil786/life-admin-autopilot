@@ -6,6 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from src.main import Pipeline
+from src.extraction.gateway_llm import build_gateway_llm
 from src.task_engine.rules import RuleEngine
 from src.task_engine.scheduler import TaskScheduler
 
@@ -37,6 +38,7 @@ def main(argv=None):
     pipeline = Pipeline(
         rules=RuleEngine(today=date.today()),
         scheduler=TaskScheduler(today=date.today()),
+        llm=build_gateway_llm(),  # None when no gateway configured
     )
     result = pipeline.run(files)
 
