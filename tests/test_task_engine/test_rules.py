@@ -10,7 +10,7 @@ def make_engine(today=None):
 def test_return_window_urgent():
     engine = make_engine()
     tasks = engine.evaluate_receipt(
-        {"vendor": "Amazon", "amount": 49.99, "date": "2024-06-10"}
+        {"vendor": "Amazon", "amount": 49.99, "date": "2024-05-21"}
     )
     assert len(tasks) == 1
     task = tasks[0]
