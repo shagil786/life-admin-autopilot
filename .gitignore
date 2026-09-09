@@ -7,3 +7,4 @@ data/cache/
 .env
 .env
 data/agent_log.jsonl
+data/eval_report.json
