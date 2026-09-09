@@ -20,12 +20,32 @@ def main(argv=None):
         "path", nargs="?", default="data/samples",
         help="File or folder of documents to scan (default: data/samples)",
     )
+    parser.add_argument(
+        "--ask", metavar="QUESTION",
+        help="Ask a question against ingested documents (RAG) instead of scanning",
+    )
     args = parser.parse_args(argv)
 
     target = Path(args.path)
     if not target.exists():
         print(f"Path not found: {target}", file=sys.stderr)
         return 1
+
+    if args.ask:
+        from src.rag.service import RagService
+
+        rag = RagService(samples_dir=str(target))
+        rag.ingest()
+        results = rag.query(args.ask, top_k=5)
+        if not results:
+            print(f"No documents matched {args.ask!r}")
+            return 0
+        print(f"Top matches for {args.ask!r}:")
+        for r in results:
+            c = r["chunk"]
+            print(f"\n[{r['citation']}] (score {r['score']})")
+            print(f"  {c['text'][:200]}")
+        return 0
 
     files = (
         [str(target)] if target.is_file()

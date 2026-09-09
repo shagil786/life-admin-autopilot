@@ -13,10 +13,20 @@ from src.task_engine.alternative_finder import (
     build_llm_search_fn,
     format_alternatives,
 )
+from src.rag.service import RagService, HALLUCINATION_GUARD
 
 # Module-level state so tools share one pipeline instance.
 _pipeline: Pipeline = None
 _drafter = MessageDrafter()
+_rag: RagService = None
+
+
+def _get_rag() -> RagService:
+    global _rag
+    if _rag is None:
+        _rag = RagService(samples_dir="data/samples")
+        _rag.ingest()
+    return _rag
 
 
 def _get_pipeline() -> Pipeline:
@@ -111,6 +121,33 @@ def find_cheaper_alternatives(product: str, current_price: float) -> str:
     if not alts:
         return f"No cheaper alternatives found for {product} within ${current_price:.2f}."
     return format_alternatives(product, alts)
+
+
+@tool(
+    description=(
+        "Search the user's ingested documents (receipts, subscriptions, "
+        "warranties, emails) and return relevant chunks WITH citations. "
+        "Use for questions like 'when did I buy X', 'what did the Y email "
+        "say', 'how much was Z'. Chunks cite their source like "
+        "file.txt#0 — always show these citations in your answer."
+    )
+)
+def search_documents(query: str, doc_type: str = "") -> str:
+    """Hybrid retrieval over ingested docs. Returns cited chunks."""
+    rag = _get_rag()
+    dtype = doc_type if doc_type in ("receipt", "subscription", "warranty", "email", "text") else None
+    results = rag.query(query, doc_type=dtype, top_k=5)
+    if not results:
+        return f"No documents matched {query!r}. The index may need re-ingesting."
+    lines = [f"{len(results)} matching chunks (best first):"]
+    for r in results:
+        c = r["chunk"]
+        lines.append(
+            f"\n[{r['citation']}] (score {r['score']}, type {c.get('doc_type')})"
+            f"\n{c['text']}"
+        )
+    lines.append(f"\n{HALLUCINATION_GUARD}")
+    return "\n".join(lines)
 
 
 @tool(
