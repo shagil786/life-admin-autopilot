@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Life Admin Autopilot</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
+  .fade-in { animation: fadeIn .35s ease both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  .typing-dot { animation: blink 1.2s infinite; }
+  .typing-dot:nth-child(2) { animation-delay: .2s; }
+  .typing-dot:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .2; } 40% { opacity: 1; } }
+  ::-webkit-scrollbar { width: 8px; } ::-webkit-scrollbar-thumb { background: #374151; border-radius: 8px; }
+</style>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen">
+
+<div class="max-w-5xl mx-auto px-4 py-8 sm:py-12">
+
+  <!-- Header -->
+  <header class="mb-10 flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
+    <div>
+      <h1 class="text-3xl sm:text-4xl font-bold tracking-tight text-white">
+        Life Admin Autopilot
+      </h1>
+      <p class="mt-2 text-slate-400 max-w-xl">
+        Drop in receipts, subscription emails, warranty cards. Get a prioritized
+        list of what needs doing — before deadlines bite.
+      </p>
+    </div>
+    <div class="flex items-center gap-2 text-xs">
+      <span id="gateway-badge" class="px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-400">
+        checking LLM…
+      </span>
+    </div>
+  </header>
+
+  <!-- Tabs -->
+  <nav class="flex gap-1 p-1 bg-slate-900 border border-slate-800 rounded-xl w-full sm:w-fit mb-8" role="tablist">
+    <button data-tab="dashboard" role="tab" class="tab-btn flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium bg-slate-800 text-white">
+      Dashboard
+    </button>
+    <button data-tab="chat" role="tab" class="tab-btn flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200">
+      Agent Chat
+    </button>
+    <button data-tab="docs" role="tab" class="tab-btn flex-1 sm:flex-none px-4 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-slate-200">
+      Document Q&A
+    </button>
+  </nav>
+
+  <!-- ============ DASHBOARD TAB ============ -->
+  <section id="tab-dashboard" class="tab-panel">
+    <!-- Upload -->
+    <div id="dropzone"
+         class="border-2 border-dashed border-slate-700 hover:border-emerald-500/60 rounded-2xl p-8 text-center cursor-pointer transition-colors mb-8 bg-slate-900/50">
+      <input type="file" id="file-input" class="hidden" multiple accept=".txt,.md,.pdf,.eml">
+      <div class="text-slate-300">
+        <svg class="w-8 h-8 mx-auto mb-3 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9m0 0 3 3m-3-3-3 3M6.75 19.5h10.5a2.25 2.25 0 0 0 2.25-2.25V8.25a2.25 2.25 0 0 0-2.25-2.25H6.75A2.25 2.25 0 0 0 4.5 8.25v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+        <p class="font-medium">Drop documents here or click to browse</p>
+        <p class="text-sm text-slate-500 mt-1">.txt · .md · .pdf · .eml — stays on your machine</p>
+      </div>
+    </div>
+    <div id="upload-status" class="hidden mb-6 text-sm"></div>
+
+    <!-- Scan button -->
+    <div class="flex items-center gap-3 mb-6">
+      <button id="scan-btn"
+              class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 disabled:cursor-wait text-white font-medium rounded-xl text-sm transition-colors">
+        Scan documents
+      </button>
+      <span id="scan-summary" class="text-sm text-slate-400"></span>
+    </div>
+
+    <!-- Loading -->
+    <div id="scan-loading" class="hidden space-y-3">
+      <div class="h-20 bg-slate-900 border border-slate-800 rounded-2xl animate-pulse"></div>
+      <div class="h-20 bg-slate-900 border border-slate-800 rounded-2xl animate-pulse"></div>
+      <div class="h-20 bg-slate-900 border border-slate-800 rounded-2xl animate-pulse"></div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="scan-empty" class="hidden text-center py-12 text-slate-500">
+      <p class="text-lg">Nothing scanned yet</p>
+      <p class="text-sm mt-1">Upload a receipt or two, then hit "Scan documents".</p>
+    </div>
+
+    <!-- Task list -->
+    <div id="task-list" class="space-y-3"></div>
+  </section>
+
+  <!-- ============ CHAT TAB ============ -->
+  <section id="tab-chat" class="tab-panel hidden">
+    <div class="border border-slate-800 bg-slate-900/50 rounded-2xl overflow-hidden">
+      <div id="chat-log" class="h-[28rem] overflow-y-auto p-4 sm:p-6 space-y-4">
+        <div class="text-center text-xs text-slate-500 py-8">
+          Ask the agent anything about your life admin — "what needs my attention?",
+          "draft a cancellation for Netflix", "find cheaper headphones".
+        </div>
+      </div>
+      <form id="chat-form" class="border-t border-slate-800 p-3 flex gap-2">
+        <input id="chat-input" autocomplete="off"
+               class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-600"
+               placeholder="Type a message…">
+        <button class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium disabled:opacity-50" id="chat-send">
+          Send
+        </button>
+      </form>
+    </div>
+    <p class="text-xs text-slate-600 mt-3">
+      Safety rule: the agent drafts and advises — it never sends emails or executes actions. You confirm everything.
+    </p>
+  </section>
+
+  <!-- ============ DOCS Q&A TAB ============ -->
+  <section id="tab-docs" class="tab-panel hidden">
+    <form id="qa-form" class="flex gap-2 mb-6">
+      <input id="qa-input" autocomplete="off"
+             class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm placeholder-slate-600 focus:outline-none focus:border-emerald-600"
+             placeholder="Ask your documents… e.g. 'when does netflix renew'">
+      <button class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-sm font-medium">
+        Search
+      </button>
+    </form>
+    <div id="qa-results" class="space-y-3"></div>
+    <div id="qa-empty" class="hidden text-center py-12 text-slate-500">
+      <p>Search your uploaded documents with citations.</p>
+    </div>
+  </section>
+
+  <footer class="mt-16 pt-6 border-t border-slate-800/60 text-xs text-slate-600 flex flex-wrap gap-x-4 gap-y-1">
+    <span>Local-first · documents never leave this machine</span>
+    <span>·</span>
+    <span><a href="https://github.com/shagil786/life-admin-autopilot" class="hover:text-slate-400 underline underline-offset-2">GitHub</a></span>
+  </footer>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+// ---------- Tabs ----------
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => {
+      b.classList.remove('bg-slate-800', 'text-white');
+      b.classList.add('text-slate-400');
+    });
+    btn.classList.add('bg-slate-800', 'text-white');
+    btn.classList.remove('text-slate-400');
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.add('hidden'));
+    $('tab-' + btn.dataset.tab).classList.remove('hidden');
+  });
+});
+
+// ---------- Health ----------
+fetch('/api/health').then(r => r.json()).then(h => {
+  const badge = $('gateway-badge');
+  if (h.llm_gateway) {
+    badge.textContent = '● LLM gateway connected';
+    badge.className = 'px-2.5 py-1 rounded-full bg-emerald-950 border border-emerald-800 text-emerald-400';
+  } else {
+    badge.textContent = '● no LLM — pipeline + Q&A still work';
+    badge.className = 'px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-400';
+  }
+}).catch(() => {});
+
+// ---------- Upload ----------
+const dz = $('dropzone'), fi = $('file-input');
+dz.addEventListener('click', () => fi.click());
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('border-emerald-500'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('border-emerald-500'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('border-emerald-500');
+  handleFiles(e.dataTransfer.files);
+});
+fi.addEventListener('change', () => handleFiles(fi.files));
+
+async function handleFiles(files) {
+  if (!files.length) return;
+  const status = $('upload-status');
+  status.classList.remove('hidden');
+  status.innerHTML = `<span class="text-slate-400">Uploading ${files.length} file(s)…</span>`;
+  let ok = 0;
+  for (const f of files) {
+    const fd = new FormData();
+    fd.append('file', f);
+    const r = await fetch('/api/upload', { method: 'POST', body: fd });
+    if (r.ok) ok++;
+  }
+  status.innerHTML = `<span class="text-emerald-400">✓ ${ok}/${files.length} uploaded</span> — now hit "Scan documents"`;
+  setTimeout(() => status.classList.add('hidden'), 6000);
+}
+
+// ---------- Scan ----------
+const PRIORITY_STYLES = {
+  overdue: { badge: 'bg-rose-950 text-rose-300 border-rose-800', label: 'OVERDUE', ring: 'border-rose-900/60' },
+  urgent:  { badge: 'bg-rose-950 text-rose-300 border-rose-800', label: 'URGENT', ring: 'border-rose-900/60' },
+  high:    { badge: 'bg-amber-950 text-amber-300 border-amber-800', label: 'HIGH', ring: 'border-amber-900/60' },
+  medium:  { badge: 'bg-sky-950 text-sky-300 border-sky-800', label: 'MEDIUM', ring: 'border-sky-900/60' },
+  low:     { badge: 'bg-slate-800 text-slate-300 border-slate-700', label: 'low', ring: 'border-slate-800' },
+};
+const ACTION_LABELS = {
+  return_or_exchange: '↩ Return / exchange',
+  cancel_or_review: '✕ Cancel / review',
+  check_warranty: '🛡 Check warranty',
+};
+
+$('scan-btn').addEventListener('click', scan);
+async function scan() {
+  const btn = $('scan-btn');
+  btn.disabled = true; btn.textContent = 'Scanning…';
+  $('scan-loading').classList.remove('hidden');
+  $('task-list').innerHTML = ''; $('scan-empty').classList.add('hidden');
+  try {
+    const r = await fetch('/api/scan', { method: 'POST' });
+    const data = await r.json();
+    renderTasks(data);
+  } catch (e) {
+    $('scan-summary').textContent = 'Scan failed: ' + e.message;
+  } finally {
+    btn.disabled = false; btn.textContent = 'Scan documents';
+    $('scan-loading').classList.add('hidden');
+  }
+}
+
+function renderTasks(data) {
+  const list = $('task-list');
+  if (!data.tasks || !data.tasks.length) {
+    $('scan-empty').classList.remove('hidden');
+    $('scan-summary').textContent = '';
+    return;
+  }
+  $('scan-summary').textContent = data.summary || '';
+  list.innerHTML = '';
+  data.tasks.forEach((t, i) => {
+    const p = PRIORITY_STYLES[t.priority] || PRIORITY_STYLES.low;
+    const overdue = t.overdue ? PRIORITY_STYLES.overdue : null;
+    const badge = overdue || p;
+    const el = document.createElement('div');
+    el.className = `fade-in border ${p.ring} bg-slate-900/60 rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-5`;
+    el.style.animationDelay = (i * 60) + 'ms';
+    el.innerHTML = `
+      <span class="shrink-0 px-2.5 py-1 rounded-lg text-xs font-semibold border ${badge.badge}">
+        ${badge.label}
+      </span>
+      <div class="flex-1 min-w-0">
+        <p class="text-slate-100 font-medium leading-snug">${escapeHtml(t.title)}</p>
+        <p class="text-xs text-slate-500 mt-1.5">${ACTION_LABELS[t.action] || t.action}${t.due_date ? ' · due ' + t.due_date : ''}</p>
+      </div>`;
+    list.appendChild(el);
+  });
+}
+
+// ---------- Chat ----------
+$('chat-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const input = $('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+  appendChat('you', msg);
+
+  const thinking = appendChat('agent', null);
+  thinking.innerHTML = '<span class="typing-dot">●</span><span class="typing-dot">●</span><span class="typing-dot">●</span> <span class="text-xs">thinking (may take ~20s)…</span>';
+  try {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: msg }),
+    });
+    const data = await r.json();
+    let html = escapeHtml(data.reply).replace(/\n/g, '<br>');
+    if (data.tools_used && data.tools_used.length) {
+      const chips = data.tools_used.map(t =>
+        `<span class="inline-block px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400 text-xs mr-1 mb-1">${t.ok ? '✓' : '✕'} ${t.tool}</span>`
+      ).join('');
+      html = `<div class="mb-3">${chips}</div>` + html;
+    }
+    thinking.innerHTML = html;
+  } catch (err) {
+    thinking.innerHTML = `<span class="text-rose-400">(error: ${escapeHtml(err.message)})</span>`;
+  }
+  $('chat-log').scrollTop = $('chat-log').scrollHeight;
+});
+
+function appendChat(who, text) {
+  const log = $('chat-log');
+  const el = document.createElement('div');
+  el.className = who === 'you'
+    ? 'flex justify-end fade-in'
+    : 'flex justify-start fade-in';
+  const bubble = document.createElement('div');
+  bubble.className = who === 'you'
+    ? 'max-w-[85%] bg-emerald-700 text-white rounded-2xl rounded-br-md px-4 py-2.5 text-sm'
+    : 'max-w-[90%] bg-slate-800 border border-slate-700 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm text-slate-200';
+  if (text !== null) bubble.textContent = text;
+  el.appendChild(bubble);
+  log.appendChild(el);
+  log.scrollTop = log.scrollHeight;
+  return bubble;
+}
+
+// ---------- Q&A ----------
+$('qa-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const q = $('qa-input').value.trim();
+  if (!q) return;
+  const results = $('qa-results');
+  results.innerHTML = '<div class="h-16 bg-slate-900 border border-slate-800 rounded-xl animate-pulse"></div>';
+  try {
+    const r = await fetch('/api/ask', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ question: q }),
+    });
+    const data = await r.json();
+    $('qa-empty').classList.add('hidden');
+    if (data.message) {
+      results.innerHTML = `<div class="text-center text-slate-500 py-6 text-sm">${escapeHtml(data.message)}</div>`;
+      return;
+    }
+    results.innerHTML = '';
+    data.chunks.forEach((c, i) => {
+      const el = document.createElement('div');
+      el.className = 'fade-in border border-slate-800 bg-slate-900/60 rounded-2xl p-4';
+      el.style.animationDelay = (i * 60) + 'ms';
+      el.innerHTML = `
+        <div class="flex items-center gap-2 mb-2 text-xs">
+          <span class="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-emerald-400 font-mono">${escapeHtml(c.citation)}</span>
+          <span class="text-slate-500">score ${c.score}</span>
+          ${c.doc_type ? `<span class="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400">${c.doc_type}</span>` : ''}
+        </div>
+        <p class="text-sm text-slate-300 leading-relaxed">${escapeHtml(c.text)}</p>`;
+      results.appendChild(el);
+    });
+  } catch (err) {
+    results.innerHTML = `<div class="text-rose-400 text-sm">(error: ${escapeHtml(err.message)})</div>`;
+  }
+});
+
+function escapeHtml(s) {
+  const d = document.createElement('div');
+  d.textContent = s ?? '';
+  return d.innerHTML;
+}
+</script>
+</body>
+</html>
