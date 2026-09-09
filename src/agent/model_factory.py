@@ -27,6 +27,11 @@ def _env(name: str, default: str = "") -> str:
     return os.environ.get(name, default)
 
 
+def get_model_id() -> str:
+    """Resolve the configured model id (for logging)."""
+    return _env("LIFE_ADMIN_MODEL", DEFAULT_MODEL)
+
+
 def build_agent(system_prompt: str, tools: list) -> Agent:
     """Create a Strands Agent backed by an OpenAI-compatible gateway."""
     base_url = _env("LIFE_ADMIN_BASE_URL", DEFAULT_BASE_URL)

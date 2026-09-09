@@ -49,8 +49,10 @@ def test_draft_action_message_return():
 def test_draft_action_message_unknown_action():
     from src.agent.tools import draft_action_message
 
+    # Guardrail rejects invalid action BEFORE execution, structured for retry
     msg = draft_action_message(action="explode", name="X")
-    assert "Unknown action" in msg
+    assert "Invalid arguments" in msg
+    assert "cancel_or_review" in msg  # tells the LLM the valid options
 
 
 def test_get_today():

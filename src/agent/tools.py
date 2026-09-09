@@ -1,4 +1,5 @@
 """Strands tools wrapping the life-admin pipeline for the agent."""
+import time
 from datetime import date
 
 from strands import tool
@@ -14,6 +15,42 @@ from src.task_engine.alternative_finder import (
     format_alternatives,
 )
 from src.rag.service import RagService, HALLUCINATION_GUARD
+from src.agent.guardrails import validate_tool_args, _DOC_TYPES
+
+def _validated(tool_name: str, args: dict, fn):
+    """Run a tool body only after arg validation; structured error back
+    to the LLM so it can retry with corrected args. Traces the call into
+    the active turn log (observability hook)."""
+    ok, err = validate_tool_args(tool_name, args)
+    if not ok:
+        _trace(tool_name, args, f"Invalid args: {err}", ok=False)
+        return f"Invalid arguments for {tool_name}: {err}. Call again with corrected arguments."
+    start = time.monotonic()
+    try:
+        result = fn()
+        _trace(tool_name, args, result, ok=True,
+               latency_ms=(time.monotonic() - start) * 1000)
+        return result
+    except Exception as e:
+        _trace(tool_name, args, f"Error: {e}", ok=False,
+               latency_ms=(time.monotonic() - start) * 1000)
+        return f"Tool error in {tool_name}: {e}. The agent can retry or report this to the user."
+
+
+# Active-turn tracing: chat.run_turn registers the current TurnLog here.
+_active_turn_log = None
+
+
+def set_active_turn_log(turn_log):
+    global _active_turn_log
+    _active_turn_log = turn_log
+
+
+def _trace(tool_name, args, result, ok, latency_ms=0.0):
+    if _active_turn_log is not None:
+        _active_turn_log.record_tool(tool_name, args=args, result=result,
+                                     ok=ok, latency_ms=latency_ms)
+
 
 # Module-level state so tools share one pipeline instance.
 _pipeline: Pipeline = None
@@ -50,31 +87,34 @@ def _get_pipeline() -> Pipeline:
 )
 def scan_documents(path: str = "data/samples") -> str:
     """Ingest -> extract -> evaluate -> format. Returns the action list."""
-    pipeline = _get_pipeline()
-    import glob
-    from pathlib import Path
+    def _run():
+        pipeline = _get_pipeline()
+        import glob
+        from pathlib import Path
 
-    target = Path(path)
-    if target.is_dir():
-        files = [
-            str(p)
-            for p in sorted(target.iterdir())
-            if p.suffix.lower() in (".pdf", ".txt", ".md", ".eml")
-        ]
-    elif target.is_file():
-        files = [str(target)]
-    else:
-        return f"Error: path not found: {path}"
+        target = Path(path)
+        if target.is_dir():
+            files = [
+                str(p)
+                for p in sorted(target.iterdir())
+                if p.suffix.lower() in (".pdf", ".txt", ".md", ".eml")
+            ]
+        elif target.is_file():
+            files = [str(target)]
+        else:
+            return f"Error: path not found: {path}"
 
-    result = pipeline.run(files)
-    # Append machine-readable details so the agent can act on specifics
-    # (product names, vendors, amounts) without re-asking the user.
-    detail_lines = ["\n--- task details ---"]
-    for i, task in enumerate(result["tasks"], 1):
-        d = task.get("details", {})
-        keep = {k: v for k, v in d.items() if k != "source"}
-        detail_lines.append(f"{i}. {keep}")
-    return result["formatted"] + f"\n\n{result['summary']}" + "\n".join(detail_lines)
+        result = pipeline.run(files)
+        # Append machine-readable details so the agent can act on specifics
+        # (product names, vendors, amounts) without re-asking the user.
+        detail_lines = ["\n--- task details ---"]
+        for i, task in enumerate(result["tasks"], 1):
+            d = task.get("details", {})
+            keep = {k: v for k, v in d.items() if k != "source"}
+            detail_lines.append(f"{i}. {keep}")
+        return result["formatted"] + f"\n\n{result['summary']}" + "\n".join(detail_lines)
+
+    return _validated("scan_documents", {"path": path}, _run)
 
 
 @tool(
@@ -89,15 +129,22 @@ def draft_action_message(
     action: str, name: str, amount: float = 0.0, date_str: str = ""
 ) -> str:
     """Draft a cancel/return message with placeholders. No message is sent."""
-    if action == "cancel_or_review":
-        return _drafter.draft_cancellation(
-            {"name": name, "amount": amount, "billing_cycle": "month"}
-        )
-    if action == "return_or_exchange":
-        return _drafter.draft_return(
-            {"vendor": name, "amount": amount, "date": date_str or None}
-        )
-    return f"Unknown action '{action}'. Use cancel_or_review or return_or_exchange."
+    def _run():
+        if action == "cancel_or_review":
+            return _drafter.draft_cancellation(
+                {"name": name, "amount": amount, "billing_cycle": "month"}
+            )
+        if action == "return_or_exchange":
+            return _drafter.draft_return(
+                {"vendor": name, "amount": amount, "date": date_str or None}
+            )
+        return f"Unknown action '{action}'. Use cancel_or_review or return_or_exchange."
+
+    return _validated(
+        "draft_action_message",
+        {"action": action, "name": name, "amount": amount},
+        _run,
+    )
 
 
 @tool(
@@ -110,17 +157,24 @@ def draft_action_message(
 )
 def find_cheaper_alternatives(product: str, current_price: float) -> str:
     """Search for cheaper alternatives to a product."""
-    search_fn = build_llm_search_fn()
-    if search_fn is None:
-        return (
-            "No search gateway configured — set LIFE_ADMIN_BASE_URL and "
-            "LIFE_ADMIN_API_KEY to enable cheaper-alternative search."
-        )
-    finder = AlternativeFinder(search_fn=search_fn)
-    alts = finder.find(product, max_price=current_price)
-    if not alts:
-        return f"No cheaper alternatives found for {product} within ${current_price:.2f}."
-    return format_alternatives(product, alts)
+    def _run():
+        search_fn = build_llm_search_fn()
+        if search_fn is None:
+            return (
+                "No search gateway configured — set LIFE_ADMIN_BASE_URL and "
+                "LIFE_ADMIN_API_KEY to enable cheaper-alternative search."
+            )
+        finder = AlternativeFinder(search_fn=search_fn)
+        alts = finder.find(product, max_price=current_price)
+        if not alts:
+            return f"No cheaper alternatives found for {product} within ${current_price:.2f}."
+        return format_alternatives(product, alts)
+
+    return _validated(
+        "find_cheaper_alternatives",
+        {"product": product, "current_price": current_price},
+        _run,
+    )
 
 
 @tool(
@@ -134,20 +188,25 @@ def find_cheaper_alternatives(product: str, current_price: float) -> str:
 )
 def search_documents(query: str, doc_type: str = "") -> str:
     """Hybrid retrieval over ingested docs. Returns cited chunks."""
-    rag = _get_rag()
-    dtype = doc_type if doc_type in ("receipt", "subscription", "warranty", "email", "text") else None
-    results = rag.query(query, doc_type=dtype, top_k=5)
-    if not results:
-        return f"No documents matched {query!r}. The index may need re-ingesting."
-    lines = [f"{len(results)} matching chunks (best first):"]
-    for r in results:
-        c = r["chunk"]
-        lines.append(
-            f"\n[{r['citation']}] (score {r['score']}, type {c.get('doc_type')})"
-            f"\n{c['text']}"
-        )
-    lines.append(f"\n{HALLUCINATION_GUARD}")
-    return "\n".join(lines)
+    def _run():
+        rag = _get_rag()
+        dtype = doc_type if doc_type in _DOC_TYPES else None
+        results = rag.query(query, doc_type=dtype, top_k=5)
+        if not results:
+            return f"No documents matched {query!r}. The index may need re-ingesting."
+        lines = [f"{len(results)} matching chunks (best first):"]
+        for r in results:
+            c = r["chunk"]
+            lines.append(
+                f"\n[{r['citation']}] (score {r['score']}, type {c.get('doc_type')})"
+                f"\n{c['text']}"
+            )
+        lines.append(f"\n{HALLUCINATION_GUARD}")
+        return "\n".join(lines)
+
+    return _validated(
+        "search_documents", {"query": query, "doc_type": doc_type}, _run
+    )
 
 
 @tool(
