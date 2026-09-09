@@ -33,6 +33,7 @@ documents (.txt/.md/.pdf/.eml)
 - **Ingestion** — normalizes PDFs, text files, and .eml emails into one internal format
 - **Extraction** — regex + LLM extraction of vendors, amounts, dates, billing cycles, warranty lengths
 - **Rule engine** — domain rules: return windows (30d), renewal alerts (7d before billing), warranty expiry (90d/30d thresholds), each producing a *priority* (urgent/high/low)
+- **RAG layer** — local hybrid retrieval (BM25 + TF-IDF) with chunk-level citations; ask "what did the Spotify email say?" and get answers grounded in your docs
 - **Strands Agent** — conversational layer that calls the pipeline as tools, explains tasks, and drafts cancellation/return messages — **never auto-sends anything** (explicit human confirmation is a hard rule)
 
 ## Quickstart
@@ -69,13 +70,14 @@ agent> [ready-to-send draft with [ORDER ID]/[ACCOUNT EMAIL] placeholders]
 ## Testing
 
 ```bash
-pytest tests/ -v     # 42 tests: ingestion, extraction, rules, output, agent tools
+pytest tests/ -v     # 88 tests: ingestion, extraction, rules, output, agent tools, RAG
 ```
 
 ## Architecture notes
 
 - **Local-first**: documents never leave your machine. The LLM gateway only sees what the agent explicitly sends (task summaries, drafting requests).
-- **TDD throughout**: every module test-first, 42 tests passing.
+- **TDD throughout**: every module test-first, 88 tests passing.
+- **RAG is local too**: hybrid BM25 + TF-IDF retrieval — no embedding service, no vector DB, everything on-device.
 - **Pluggable models**: any OpenAI-compatible endpoint works (APInex, Token Harbor, Kira AI, local Ollama, AWS Bedrock via `BedrockModel`).
 
 ## Project structure
@@ -102,4 +104,5 @@ src/
 - [x] Strands Agent chat with tool calls
 - [x] Email (.eml) ingestion
 - [x] Cheaper-alternative finder (LLM-backed, pluggable search)
-- [ ] LLM-powered extraction for messy scans
+- [x] LLM-powered extraction for messy scans
+- [x] Local RAG: hybrid retrieval + chunk-level citations
