@@ -90,6 +90,7 @@ src/
 ├── extraction/        # receipt, subscription, warranty extractors
 ├── task_engine/      # deadline rules + priority scheduler
 ├── output/           # message drafter, task formatter
+├── rag/              # chunker, hybrid index (BM25+TF-IDF), cited retrieval
 └── agent/            # Strands Agent, tools, prompts
 ```
 
