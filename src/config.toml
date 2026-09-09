@@ -1,0 +1,5 @@
+[app]
+model_name = "claude-3-5-sonnet-20241022"
+max_retries = 3
+local_processing = true
+storage_path = "./data"
