@@ -70,3 +70,29 @@ def test_source_preserved():
 def test_missing_llm_returns_empty():
     ext = LLMExtractor(llm=None)
     assert ext.extract(make_doc("text")) == {}
+
+
+def test_year_bump_for_receipt_dates():
+    # Receipt date guessed a year too old gets bumped to the recent occurrence
+    from datetime import date
+    llm = MockLLM(['{"vendor": "Acme", "amount": 10.0, "date": "2025-08-30"}'])
+    ext = LLMExtractor(llm=llm, today=date(2026, 9, 10))
+    result = ext.extract(make_doc("paid 8/30"))
+    assert result["date"] == "2026-08-30"
+
+
+def test_no_year_bump_for_warranty_dates():
+    # A warranty purchase date 3 years ago is legitimate — no bump
+    from datetime import date
+    llm = MockLLM(['{"product": "Fridge", "warranty_years": 3, "date": "2023-09-15"}'])
+    ext = LLMExtractor(llm=llm, today=date(2026, 9, 10))
+    result = ext.extract(make_doc("warranty card"))
+    assert result["date"] == "2023-09-15"
+
+
+def test_future_renewal_date_kept():
+    from datetime import date
+    llm = MockLLM(['{"vendor": "X", "next_billing_date": "2026-10-01"}'])
+    ext = LLMExtractor(llm=llm, today=date(2026, 9, 10))
+    result = ext.extract(make_doc("renewal"))
+    assert result["next_billing_date"] == "2026-10-01"

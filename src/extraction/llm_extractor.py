@@ -6,6 +6,7 @@ pass anything with a complete(prompt) -> str method.
 """
 import json
 import re
+from datetime import date
 from typing import Optional, Protocol
 
 from src.extraction.base import BaseExtractor
@@ -43,16 +44,23 @@ class LLMExtractor(BaseExtractor):
         "warranty_years", "billing_cycle", "next_billing_date",
     }
 
-    def __init__(self, llm: Optional[CompletionLLM] = None, retries: int = 3):
+    def __init__(self, llm: Optional[CompletionLLM] = None, retries: int = 3,
+                 today: Optional[date] = None):
         self._llm = llm
         self._retries = retries
+        self._today = today or date.today()
 
     def extract(self, doc: Document) -> dict:
         if not self._llm or not doc.content.strip():
             return {}
-        for attempt in range(3):
+        for attempt in range(self._retries):
             try:
-                raw = self._llm.complete(EXTRACTION_PROMPT + doc.content)
+                prompt = (
+                    f"Today's date is {self._today.isoformat()}.\n\n"
+                    + EXTRACTION_PROMPT
+                    + doc.content
+                )
+                raw = self._llm.complete(prompt)
                 data = self._parse_json(raw)
             except Exception:
                 continue  # retry transient gateway errors
@@ -64,10 +72,47 @@ class LLMExtractor(BaseExtractor):
                 if k in self._ALLOWED and v is not None
             }
             if cleaned:
+                cleaned = self._fix_dates(cleaned)
                 cleaned["source"] = doc.source
                 return cleaned
             # all-null or empty result: the free-tier model is flaky — retry
         return {}
+
+    def _fix_dates(self, data: dict) -> dict:
+        """Year-bump heuristic for receipt-like documents only.
+
+        Receipts are recent by nature: a "date" over a year old with the
+        same month/day in the last 365 days was probably a wrong-year
+        guess by the LLM (partial dates like "8/30"). Warranty purchase
+        dates are legitimately old, so skip the bump when warranty_years
+        is present. Renewal dates in the future are left alone; past ones
+        are bumped to the next occurrence."""
+        has_warranty = data.get("warranty_years") is not None
+        for key in ("date", "next_billing_date"):
+            value = data.get(key)
+            if not isinstance(value, str):
+                continue
+            try:
+                d = date.fromisoformat(value)
+            except ValueError:
+                continue
+            if key == "next_billing_date":
+                if d >= self._today:
+                    continue  # future renewal — correct as-is
+                # past renewal: bump to next occurrence within a year
+                bumped = d.replace(year=d.year + (age_years := (self._today - d).days // 365) + 1)
+                if 0 <= (bumped - self._today).days <= 365:
+                    data[key] = bumped.isoformat()
+                continue
+            # key == "date": only bump receipt-like docs (no warranty info)
+            if has_warranty:
+                continue
+            age_days = (self._today - d).days
+            if age_days > 365:
+                bumped = d.replace(year=d.year + (age_days // 365))
+                if 0 <= (self._today - bumped).days <= 365:
+                    data[key] = bumped.isoformat()
+        return data
 
     def _parse_json(self, text: str):
         """Tolerate markdown fences and surrounding prose."""
