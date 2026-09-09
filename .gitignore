@@ -8,3 +8,4 @@ data/cache/
 .env
 data/agent_log.jsonl
 data/eval_report.json
+src/web/firebase-config.json

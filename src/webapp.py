@@ -155,6 +155,106 @@ def chat(req: ChatRequest):
     }
 
 
+class ConnectEmailRequest(BaseModel):
+    provider: str = "gmail"        # gmail | outlook | icloud | custom
+    email: str
+    password: str                  # app password — kept in memory only
+    days: int = 30
+
+
+# In-memory only: credentials are never persisted; connection is used
+# immediately and discarded.
+
+IMAP_HOSTS = {
+    "gmail": "imap.gmail.com",
+    "outlook": "outlook.office365.com",
+    "icloud": "imap.mail.me.com",
+    "yahoo": "imap.mail.yahoo.com",
+}
+
+
+@app.post("/api/connect-email")
+def connect_email(req: ConnectEmailRequest):
+    """Fetch life-admin emails via IMAP into data/uploads, then auto-scan."""
+    from src.ingestion.email_connector import EmailConnector
+
+    host = IMAP_HOSTS.get(req.provider) or req.provider
+    try:
+        connector = EmailConnector(
+            host=host, user=req.email, password=req.password
+        )
+        result = connector.fetch_and_save(
+            save_dir=str(UPLOAD_DIR), days=req.days
+        )
+    except Exception as e:
+        msg = str(e)
+        if "AUTHENTIC" in msg.upper() or "LOGIN" in msg.upper():
+            raise HTTPException(
+                401,
+                "Login failed. For Gmail you need an App Password "
+                "(myaccount.google.com → Security → 2FA → App passwords), "
+                "not your normal password.",
+            )
+        raise HTTPException(502, f"IMAP connection failed: {msg[:200]}")
+
+    refresh_rag()
+    # auto-scan after fetch
+    files = [
+        str(p) for p in sorted(UPLOAD_DIR.iterdir())
+        if p.suffix.lower() in (".pdf", ".txt", ".md", ".eml")
+    ]
+    scan_result = get_pipeline().run(files) if files else {"tasks": [], "summary": ""}
+    return {
+        "fetch": result,
+        "tasks": scan_result.get("tasks", []),
+        "summary": scan_result.get("summary", ""),
+    }
+
+
+class GmailImportRequest(BaseModel):
+    access_token: str
+    days: int = 30
+
+
+@app.post("/api/gmail-import")
+def gmail_import(req: GmailImportRequest):
+    """Import life-admin emails from Gmail via OAuth token (Firebase sign-in)."""
+    from src.ingestion.gmail_connector import import_gmail, GmailAuthError
+
+    try:
+        result = import_gmail(
+            req.access_token, save_dir=str(UPLOAD_DIR), days=req.days
+        )
+    except GmailAuthError as e:
+        raise HTTPException(401, str(e))
+
+    refresh_rag()
+    files = [
+        str(p) for p in sorted(UPLOAD_DIR.iterdir())
+        if p.suffix.lower() in (".pdf", ".txt", ".md", ".eml")
+    ]
+    scan_result = get_pipeline().run(files) if files else {"tasks": [], "summary": ""}
+    return {
+        "fetch": result,
+        "tasks": scan_result.get("tasks", []),
+        "summary": scan_result.get("summary", ""),
+    }
+
+
+@app.get("/api/firebase-config")
+def firebase_config():
+    """Serve Firebase web config if the operator has set it up.
+
+    Create src/web/firebase-config.json from firebase-config.example.json
+    (Firebase console → Project settings → Your apps → Web app config).
+    """
+    config_file = Path(__file__).parent / "web" / "firebase-config.json"
+    if not config_file.exists():
+        return {"configured": False}
+    import json
+    return {"configured": True, "config": json.loads(config_file.read_text())}
+
+
 @app.get("/api/health")
 def health():
     gateway = build_gateway_llm() is not None

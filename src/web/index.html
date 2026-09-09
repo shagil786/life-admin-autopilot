@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Life Admin Autopilot</title>
 <script src="https://cdn.tailwindcss.com"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root { color-scheme: dark; }
   body { font-family: ui-sans-serif, system-ui, -apple-system, sans-serif; }
@@ -55,13 +57,54 @@
   <!-- ============ DASHBOARD TAB ============ -->
   <section id="tab-dashboard" class="tab-panel">
     <!-- Upload -->
-    <div id="dropzone"
-         class="border-2 border-dashed border-slate-700 hover:border-emerald-500/60 rounded-2xl p-8 text-center cursor-pointer transition-colors mb-8 bg-slate-900/50">
-      <input type="file" id="file-input" class="hidden" multiple accept=".txt,.md,.pdf,.eml">
-      <div class="text-slate-300">
-        <svg class="w-8 h-8 mx-auto mb-3 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9m0 0 3 3m-3-3-3 3M6.75 19.5h10.5a2.25 2.25 0 0 0 2.25-2.25V8.25a2.25 2.25 0 0 0-2.25-2.25H6.75A2.25 2.25 0 0 0 4.5 8.25v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
-        <p class="font-medium">Drop documents here or click to browse</p>
-        <p class="text-sm text-slate-500 mt-1">.txt · .md · .pdf · .eml — stays on your machine</p>
+    <div class="flex flex-col sm:flex-row gap-3 mb-8">
+      <div id="dropzone"
+           class="flex-1 border-2 border-dashed border-slate-700 hover:border-emerald-500/60 rounded-2xl p-8 text-center cursor-pointer transition-colors bg-slate-900/50">
+        <input type="file" id="file-input" class="hidden" multiple accept=".txt,.md,.pdf,.eml">
+        <div class="text-slate-300">
+          <svg class="w-8 h-8 mx-auto mb-3 text-slate-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V9m0 0 3 3m-3-3-3 3M6.75 19.5h10.5a2.25 2.25 0 0 0 2.25-2.25V8.25a2.25 2.25 0 0 0-2.25-2.25H6.75A2.25 2.25 0 0 0 4.5 8.25v9a2.25 2.25 0 0 0 2.25 2.25Z"/></svg>
+          <p class="font-medium">Drop documents here or click to browse</p>
+          <p class="text-sm text-slate-500 mt-1">.txt · .md · .pdf · .eml — stays on your machine</p>
+        </div>
+      </div>
+      <button id="connect-email-btn"
+              class="sm:w-64 border border-slate-700 hover:border-emerald-600 hover:bg-slate-900 rounded-2xl px-6 py-8 text-left transition-colors bg-slate-900/50">
+        <svg class="w-8 h-8 mb-3 text-emerald-500" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21.75 6.75v10.5a2.25 2.25 0 0 1-2.25 2.25h-15a2.25 2.25 0 0 1-2.25-2.25V6.75m19.5 0A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25m19.5 0v.243a2.25 2.25 0 0 1-1.07 1.916l-7.5 4.615a2.25 2.25 0 0 1-2.36 0L3.32 8.91a2.25 2.25 0 0 1-1.07-1.916V6.75"/></svg>
+        <p class="font-medium text-slate-200">Connect your email</p>
+        <p class="text-sm text-slate-500 mt-1">Auto-import receipts, renewals and warranties from your inbox</p>
+      </button>
+    </div>
+
+    <!-- Email connect modal (Firebase Google Sign-In) -->
+    <div id="email-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md p-6 fade-in">
+        <div class="flex items-start justify-between mb-4">
+          <h2 class="text-lg font-semibold text-white">Connect your Gmail</h2>
+          <button id="email-modal-close" class="text-slate-500 hover:text-slate-300 text-xl leading-none">×</button>
+        </div>
+        <div id="email-modal-body">
+          <button id="google-signin-btn"
+                  class="w-full flex items-center justify-center gap-3 bg-white hover:bg-slate-100 text-slate-900 font-medium rounded-xl px-4 py-2.5 text-sm transition-colors">
+            <svg class="w-5 h-5" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            Continue with Google
+          </button>
+          <div class="flex items-center gap-2 mt-4">
+            <label class="text-sm text-slate-400">Look back</label>
+            <select id="email-days" class="ml-auto bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-600">
+              <option value="7">7 days</option>
+              <option value="30" selected>30 days</option>
+              <option value="90">90 days</option>
+            </select>
+          </div>
+          <p class="text-xs text-slate-500 mt-4">We only read inbox emails matching life-admin topics (receipts, renewals, warranties, bills) — nothing else. Your token stays in memory; nothing is stored.</p>
+          <div id="email-connect-status" class="hidden text-sm mt-4"></div>
+        </div>
+        <div id="email-setup-hint" class="hidden mt-4 p-3 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400">
+          <strong class="text-slate-300">Firebase not configured.</strong>
+          Copy <code class="text-emerald-400">src/web/firebase-config.example.json</code> to
+          <code class="text-emerald-400">firebase-config.json</code> and fill in your project keys
+          (Firebase console → Project settings → Your apps). Enable Google sign-in in Authentication.
+        </div>
       </div>
     </div>
     <div id="upload-status" class="hidden mb-6 text-sm"></div>
@@ -166,6 +209,75 @@ fetch('/api/health').then(r => r.json()).then(h => {
     badge.className = 'px-2.5 py-1 rounded-full bg-slate-800 border border-slate-700 text-slate-400';
   }
 }).catch(() => {});
+
+// ---------- Email connect (Firebase Google Sign-In) ----------
+let firebaseReady = false;
+fetch('/api/firebase-config').then(r => r.json()).then(f => {
+  if (f.configured && window.firebase) {
+    firebase.initializeApp(f.config);
+    firebaseReady = true;
+  } else if (!f.configured) {
+    // leave the button; clicking will show the setup hint
+    window.__firebaseUnconfigured = true;
+  }
+}).catch(() => { window.__firebaseUnconfigured = true; });
+
+const modal = $('email-modal');
+function openModal() {
+  modal.classList.remove('hidden');
+  if (window.__firebaseUnconfigured) $('email-setup-hint').classList.remove('hidden');
+}
+function closeModal() { modal.classList.add('hidden'); }
+$('connect-email-btn').addEventListener('click', openModal);
+$('email-modal-close').addEventListener('click', closeModal);
+modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+
+$('google-signin-btn').addEventListener('click', async () => {
+  const status = $('email-connect-status');
+  if (window.__firebaseUnconfigured || !firebaseReady) {
+    $('email-setup-hint').classList.remove('hidden');
+    return;
+  }
+  status.classList.remove('hidden');
+  status.innerHTML = '<span class="text-slate-400">Opening Google sign-in…</span>';
+  try {
+    const provider = new firebase.auth.GoogleAuthProvider();
+    provider.addScope('https://www.googleapis.com/auth/gmail.readonly');
+    const cred = await firebase.auth().signInWithPopup(provider);
+    status.innerHTML = '<span class="text-slate-400">Signed in as ' +
+      escapeHtml(cred.user.email) + ' — importing…</span>';
+
+    const token = await cred.user.getIdToken();
+    // We need the OAuth access token for Gmail API, not the Firebase ID token.
+    // firebase-auth-compat exposes the OAuth token via the credential result:
+    const oauthToken = cred.credential?.accessToken;
+    if (!oauthToken) throw new Error('No Gmail access granted — re-try and tick the consent.');
+
+    const days = $('email-days').value;
+    const r = await fetch('/api/gmail-import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ access_token: oauthToken, days: Number(days) }),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || ('import failed: ' + r.status));
+    }
+    const data = await r.json();
+    status.innerHTML = `<span class="text-emerald-400">✓ Imported ${data.fetch.fetched} email(s)` +
+      (data.fetch.skipped ? `, skipped ${data.fetch.skipped}` : '') + '</span>';
+    renderTasks(data);
+    setTimeout(closeModal, 1800);
+  } catch (err) {
+    const msg = String(err.message || err);
+    if (msg.includes('popup')) {
+      status.innerHTML = '<span class="text-rose-400">Popup blocked — allow popups and retry.</span>';
+    } else {
+      status.innerHTML = '<span class="text-rose-400">' + escapeHtml(msg) + '</span>';
+    }
+  }
+});
 
 // ---------- Upload ----------
 const dz = $('dropzone'), fi = $('file-input');
