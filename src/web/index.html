@@ -190,7 +190,7 @@ async function handleFiles(files) {
     const r = await fetch('/api/upload', { method: 'POST', body: fd });
     if (r.ok) ok++;
   }
-  status.innerHTML = `<span class="text-emerald-400">✓ ${ok}/${files.length} uploaded</span> — now hit "Scan documents"`;
+  status.innerHTML = `<span class="text-emerald-400">✓ ${ok}/${files.length} uploaded</span> — ready to scan`;
   setTimeout(() => status.classList.add('hidden'), 6000);
 }
 
@@ -272,7 +272,7 @@ $('chat-form').addEventListener('submit', async (e) => {
       body: JSON.stringify({ message: msg }),
     });
     const data = await r.json();
-    let html = escapeHtml(data.reply).replace(/\n/g, '<br>');
+    let html = renderMarkdown(data.reply);
     if (data.tools_used && data.tools_used.length) {
       const chips = data.tools_used.map(t =>
         `<span class="inline-block px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 text-slate-400 text-xs mr-1 mb-1">${t.ok ? '✓' : '✕'} ${t.tool}</span>`
@@ -345,6 +345,28 @@ function escapeHtml(s) {
   const d = document.createElement('div');
   d.textContent = s ?? '';
   return d.innerHTML;
+}
+
+// Minimal safe markdown: **bold**, *italic*, `code`, ``` blocks, lists, headings
+function renderMarkdown(text) {
+  let html = escapeHtml(text);
+  // code blocks first
+  html = html.replace(/```([\s\S]*?)```/g, (_, code) =>
+    `<pre class="bg-slate-950 border border-slate-800 rounded-xl p-3 my-2 text-xs overflow-x-auto text-emerald-300">${code.trim()}</pre>`);
+  html = html.replace(/^#{1,3}\s(.+)$/gm, '<strong class="text-white">$1</strong>');
+  html = html.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+  html = html.replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g, '<em>$1</em>');
+  html = html.replace(/`([^`]+)`/g, '<code class="px-1 py-0.5 rounded bg-slate-950 border border-slate-800 text-emerald-300 text-xs">$1</code>');
+  // links: [text](url)
+  html = html.replace(/\[([^\]]+)\]\(([^\s)]+)\)/g,
+    '<a href="$2" class="text-emerald-400 underline underline-offset-2 hover:text-emerald-300">$1</a>');
+  // list items
+  html = html.replace(/^[-·]\s(.+)$/gm, '<li class="ml-4 list-disc">$1</li>');
+  html = html.replace(/^\d+\.\s(.+)$/gm, '<li class="ml-4 list-decimal">$1</li>');
+  html = html.replace(/\n/g, '<br>');
+  // collapse breaks around list items
+  html = html.replace(/<br>(<li)/g, '$1').replace(/(<\/li>)<br>/g, '$1');
+  return html;
 }
 </script>
 </body>
