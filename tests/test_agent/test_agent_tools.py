@@ -63,7 +63,10 @@ def test_model_factory_env_config(monkeypatch):
     import os
     from src.agent.model_factory import _env
 
-    monkeypatch.setenv("LIFE_ADMIN_MODEL", "test-model")
-    assert _env("LIFE_ADMIN_MODEL", "default") == "test-model"
-    monkeypatch.delenv("LIFE_ADMIN_MODEL")
-    assert _env("LIFE_ADMIN_MODEL", "default") == "default"
+    # Use a variable that .env never defines
+    monkeypatch.setenv("LIFE_ADMIN_TEST_VAR", "from-env")
+    assert _env("LIFE_ADMIN_TEST_VAR", "default") == "from-env"
+    monkeypatch.delenv("LIFE_ADMIN_TEST_VAR")
+    assert _env("LIFE_ADMIN_TEST_VAR", "default") == "default"
+    # Defaults are applied when nothing is set
+    assert _env("LIFE_ADMIN_TEST_VAR", "fallback") == "fallback"

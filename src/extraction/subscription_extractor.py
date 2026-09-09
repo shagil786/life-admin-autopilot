@@ -25,7 +25,15 @@ class SubscriptionExtractor(BaseExtractor):
 
     def _extract_name(self, text: str) -> Optional[str]:
         match = re.search(NAME_PATTERN, text)
-        return match.group(1).strip() if match else None
+        if not match:
+            return None
+        name = match.group(1).strip()
+        # Strip common leading filler words from email subjects/bodies
+        for filler in ("Your", "The", "Our", "My"):
+            if name.startswith(filler + " "):
+                name = name[len(filler) + 1:]
+                break
+        return name or None
 
     def _extract_amount_and_cycle(self, text: str) -> tuple:
         monthly = re.search(MONTHLY_PATTERN, text, re.IGNORECASE)

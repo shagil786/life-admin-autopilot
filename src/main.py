@@ -2,6 +2,7 @@
 from pathlib import Path
 from src.ingestion.pdf_parser import PDFParser
 from src.ingestion.text_parser import TextParser
+from src.ingestion.email_parser import EmailParser
 from src.extraction.receipt_extractor import ReceiptExtractor
 from src.extraction.subscription_extractor import SubscriptionExtractor
 from src.extraction.warranty_extractor import WarrantyExtractor
@@ -20,6 +21,7 @@ class Pipeline:
             ".pdf": PDFParser(),
             ".txt": TextParser(),
             ".md": TextParser(),
+            ".eml": EmailParser(),
         }
         self.extractors = [
             ReceiptExtractor(),

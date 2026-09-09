@@ -42,7 +42,7 @@ def scan_documents(path: str = "data/samples") -> str:
         files = [
             str(p)
             for p in sorted(target.iterdir())
-            if p.suffix.lower() in (".pdf", ".txt", ".md")
+            if p.suffix.lower() in (".pdf", ".txt", ".md", ".eml")
         ]
     elif target.is_file():
         files = [str(target)]

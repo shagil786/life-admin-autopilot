@@ -28,10 +28,10 @@ def main(argv=None):
 
     files = (
         [str(target)] if target.is_file()
-        else [str(p) for p in sorted(target.iterdir()) if p.suffix.lower() in (".pdf", ".txt", ".md")]
+        else [str(p) for p in sorted(target.iterdir()) if p.suffix.lower() in (".pdf", ".txt", ".md", ".eml")]
     )
     if not files:
-        print(f"No documents (.pdf/.txt/.md) found in {target}", file=sys.stderr)
+        print(f"No documents (.pdf/.txt/.md/.eml) found in {target}", file=sys.stderr)
         return 1
 
     pipeline = Pipeline(
